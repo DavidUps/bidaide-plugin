@@ -11,12 +11,12 @@ import com.bidaide.adb.AdbShell
 import com.bidaide.adb.AdbTargetResolver
 import com.bidaide.adb.AdbTasks
 import com.bidaide.gh.GhCli
-import com.bidaide.gh.GhCommands
 import com.bidaide.gh.GhException
 import com.bidaide.gh.GhPullRequest
 import com.bidaide.gh.GhRepoContext
 import com.bidaide.github.actions.GitHubProjectAction
 import com.bidaide.github.pr.PrAppModule
+import com.bidaide.github.pr.PrWorktreeGit
 import com.bidaide.github.pr.PrWorktrees
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.filters.TextConsoleBuilderFactory
@@ -36,9 +36,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
-import git4idea.commands.Git
 import git4idea.commands.GitCommand
-import git4idea.commands.GitLineHandler
 import git4idea.repo.GitRepository
 import org.jetbrains.plugins.gradle.service.GradleInstallationManager
 import org.jetbrains.plugins.gradle.settings.GradleSettings
@@ -89,9 +87,7 @@ object PrWorktreeRun {
     /** Blocking: fetches the head, creates or updates the worktree and starts (but does not yet read) the Gradle build. */
     private fun prepare(project: Project, repository: GitRepository, number: Int, module: PrAppModule, serial: String?): Prepared {
         val repoRoot = VfsUtilCore.virtualToIoFile(repository.root)
-        val commit = fetchHead(project, repository, repoRoot, number)
-        val dir = PrWorktrees.worktreeDir(File(PathManager.getSystemPath()), repoRoot.path, number)
-        checkoutWorktree(project, repoRoot, dir, commit)
+        val (dir, commit) = PrWorktreeGit.prepare(project, repository, repoRoot, number)
 
         val linkedPath = GradleSettings.getInstance(project).linkedProjectsSettings.firstOrNull()?.externalProjectPath ?: project.basePath
         val userGradleRoot = linkedPath?.let(::File) ?: repoRoot
@@ -122,48 +118,6 @@ object PrWorktreeRun {
             appendLine("> ${wrapper.name} $task")
         }
         return Prepared(dir, ColoredProcessHandler(commandLine), header, localProperties.isFile)
-    }
-
-    /** Fetches `pull/<n>/head` from the remote `gh` uses, without touching any local branch, and returns its commit. */
-    private fun fetchHead(project: Project, repository: GitRepository, repoRoot: File, number: Int): String {
-        val nameWithOwner = GhCli.run(repoRoot, GhCommands.repoName()).trim()
-        val remotes = repository.remotes.associate { it.name to it.urls }
-        val remote = PrWorktrees.remoteFor(remotes, nameWithOwner)
-        val source = remote ?: PrWorktrees.repoUrl(nameWithOwner)
-        git(project, repoRoot, GitCommand.FETCH, PrWorktrees.fetchArgs(source, number), urls = remotes[remote] ?: listOf(source))
-        return git(project, repoRoot, GitCommand.REV_PARSE, listOf("FETCH_HEAD")).firstOrNull { it.isNotBlank() }?.trim()
-            ?: throw GhException(BidaideBundle.message("github.pr.worktree.noCommit", number))
-    }
-
-    /** Reuses the PR's worktree when git still knows it; otherwise (re)creates it detached at [commit]. */
-    private fun checkoutWorktree(project: Project, repoRoot: File, dir: File, commit: String) {
-        if (dir.isDirectory && isRegistered(project, repoRoot, dir)) {
-            git(project, dir, GitCommand.CHECKOUT, PrWorktrees.updateArgs(commit))
-            return
-        }
-        // Forgets a worktree whose folder was deleted by hand, so the add below does not refuse the path.
-        git(project, repoRoot, GitCommand.WORKTREE, listOf("prune"))
-        val root = PrWorktrees.root(File(PathManager.getSystemPath()))
-        // A folder git does not know as a worktree is a leftover of ours (it is inside bidaide-worktrees).
-        if (dir.exists() && PrWorktrees.isInside(root, dir)) FileUtil.delete(dir)
-        dir.parentFile.mkdirs()
-        git(project, repoRoot, GitCommand.WORKTREE, PrWorktrees.addArgs(dir, commit))
-    }
-
-    private fun isRegistered(project: Project, repoRoot: File, dir: File): Boolean =
-        listWorktrees(project, repoRoot).any { File(it).canonicalFile == dir.canonicalFile }
-
-    private fun listWorktrees(project: Project, repoRoot: File): List<String> =
-        PrWorktrees.parseWorktreeList(git(project, repoRoot, GitCommand.WORKTREE, listOf("list", "--porcelain")).joinToString("\n"))
-
-    /** Blocking. Output lines; a failure becomes a [GhException] so [GhCli.async] reports it like any other. */
-    private fun git(project: Project, dir: File, command: GitCommand, args: List<String>, urls: List<String>? = null): List<String> {
-        val handler = GitLineHandler(project, dir, command)
-        urls?.let(handler::setUrls)
-        handler.addParameters(args)
-        val result = Git.getInstance().runCommand(handler)
-        if (!result.success()) throw GhException(BidaideBundle.message("github.pr.worktree.gitFailed", command.name(), result.errorOutputAsJoinedString))
-        return result.output
     }
 
     /** Streams the build into a closable tab of the Bidaide tool window; on success, starts the app on the devices. */
@@ -221,7 +175,7 @@ object PrWorktreeRun {
         val repoDir = PrWorktrees.repoDir(systemDir, repoRoot.path)
         GhCli.async(
             project, BidaideBundle.message("github.pr.worktrees.searching"),
-            work = { PrWorktrees.ownWorktrees(repoDir, listWorktrees(project, repoRoot)) },
+            work = { PrWorktrees.ownWorktrees(repoDir, PrWorktreeGit.listWorktrees(project, repoRoot)) },
         ) { worktrees ->
             val leftovers = repoDir.listFiles().orEmpty().count { dir -> worktrees.none { it.canonicalFile == dir.canonicalFile } }
             if (worktrees.isEmpty() && leftovers == 0) {
@@ -238,8 +192,8 @@ object PrWorktreeRun {
             GhCli.async(
                 project, BidaideBundle.message("github.pr.worktrees.deleting"),
                 work = {
-                    worktrees.forEach { git(project, repoRoot, GitCommand.WORKTREE, PrWorktrees.removeArgs(it)) }
-                    git(project, repoRoot, GitCommand.WORKTREE, listOf("prune"))
+                    worktrees.forEach { PrWorktreeGit.git(project, repoRoot, GitCommand.WORKTREE, PrWorktrees.removeArgs(it)) }
+                    PrWorktreeGit.git(project, repoRoot, GitCommand.WORKTREE, listOf("prune"))
                     // Folders git had already forgotten; only ever inside bidaide-worktrees.
                     repoDir.listFiles().orEmpty().filter { PrWorktrees.isInside(root, it) }.forEach(FileUtil::delete)
                     if (PrWorktrees.isInside(root, repoDir) && repoDir.listFiles().isNullOrEmpty()) FileUtil.delete(repoDir)

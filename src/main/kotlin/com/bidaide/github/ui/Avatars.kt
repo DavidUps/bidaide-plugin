@@ -69,10 +69,11 @@ object AvatarImages {
 
     /**
      * Where GitHub serves the picture of any account, with no API call: enough for lists, where only the login is
-     * known. Null for names that are not logins.
+     * known. Null for names that are not logins. The image host answers it directly and honours `s=`, unlike
+     * `github.com/<login>.png`, whose redirect drops the size.
      */
     fun profilePicture(login: String): String? =
-        if (com.bidaide.gh.GhPeople.isValidLogin(login)) "https://github.com/${login.replace("[bot]", "")}.png" else null
+        if (com.bidaide.gh.GhPeople.isValidLogin(login)) "https://avatars.githubusercontent.com/${login.replace("[bot]", "")}" else null
 
     /** The image if it has been downloaded already. */
     fun cached(url: String): Image? = images[url]

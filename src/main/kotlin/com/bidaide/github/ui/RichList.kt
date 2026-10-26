@@ -265,12 +265,16 @@ class RichRowRenderer<T>(private val describe: (T) -> RichRow) : ListCellRendere
             icon.image = it
             return icon
         }
-        // Once per address: a failed download answers at once, and asking again on every paint would never settle.
+        // Once per address while it loads. A failure frees it again, so a later paint retries once AvatarImages
+        // allows it (a network hiccup when the list first showed must not leave initials for good); the failed
+        // callback repaints nothing, so this never loops.
         if (requested.add(url)) {
             AvatarImages.load(url) { image ->
                 if (image != null) {
                     icon.image = image
                     list.repaint()
+                } else {
+                    requested.remove(url)
                 }
             }
         }

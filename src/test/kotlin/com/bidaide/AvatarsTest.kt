@@ -209,6 +209,14 @@ class AvatarsTest {
     }
 
     @Test
+    fun `list avatars come straight from the image host, which honours the size`() {
+        assertEquals("https://avatars.githubusercontent.com/octocat?s=40", AvatarImages.sizedUrl(AvatarImages.profilePicture("octocat")!!, 40))
+        assertEquals("https://avatars.githubusercontent.com/dependabot", AvatarImages.profilePicture("dependabot[bot]"))
+        assertTrue(AvatarImages.isTrusted(AvatarImages.profilePicture("octocat")!!))
+        assertNull(AvatarImages.profilePicture("not a login"))
+    }
+
+    @Test
     fun `avatars are requested at the size shown`() {
         assertEquals("https://avatars.githubusercontent.com/u/1?v=4&s=40", AvatarImages.sizedUrl(avatar, 40))
         assertEquals("https://avatars.githubusercontent.com/u/1?s=40", AvatarImages.sizedUrl("https://avatars.githubusercontent.com/u/1", 40))

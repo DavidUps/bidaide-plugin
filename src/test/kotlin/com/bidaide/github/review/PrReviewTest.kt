@@ -15,6 +15,13 @@ import org.junit.Test
 
 class PrReviewTest {
     @Test
+    fun `the file filter needs every word somewhere in the path, ignoring case`() {
+        val path = "app/src/main/java/com/acme/ui/login/LoginView.kt"
+        for (query in listOf("", "  ", "loginview", "login view", "UI  LOGIN", ".kt")) assertTrue(query, PrReviewWindow.FileFilter.matches(path, query))
+        for (query in listOf("register", "login register", "view.java")) assertFalse(query, PrReviewWindow.FileFilter.matches(path, query))
+    }
+
+    @Test
     fun `commentable lines follow the hunks`() {
         val patch = """
             @@ -2,4 +2,5 @@ package a
