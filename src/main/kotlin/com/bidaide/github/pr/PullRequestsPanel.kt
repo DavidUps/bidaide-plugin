@@ -16,6 +16,7 @@ import com.bidaide.gh.GhRepoContext
 import com.bidaide.gh.GhTimeline
 import com.bidaide.gh.display
 import com.bidaide.github.review.PrReviewDiff
+import com.bidaide.github.review.PrReviewWorktree
 import com.bidaide.github.runs.CiArtifacts
 import com.bidaide.github.ui.GhListDetailPanel
 import com.bidaide.github.ui.Html
@@ -99,6 +100,9 @@ class PullRequestsPanel(project: Project) : GhListDetailPanel<GhPullRequest>(
             add(button(BidaideBundle.message("github.pr.button.requestChanges")) { review(item, ReviewKind.REQUEST_CHANGES) })
             add(button(BidaideBundle.message("github.pr.button.comment")) { comment(item) })
         }
+        add(button(BidaideBundle.message("github.pr.button.reviewInWorktree")) { PrReviewWorktree.open(project, item) }.apply {
+            toolTipText = BidaideBundle.message("github.review.worktree.tooltip")
+        })
         // Building, installing and starting the app need Android Studio (see AndroidBridge).
         if (AndroidBridge.isAvailable) {
             add(button(BidaideBundle.message("github.pr.button.testOnDevice")) { PullRequestActions.testOnDevice(project, item) })

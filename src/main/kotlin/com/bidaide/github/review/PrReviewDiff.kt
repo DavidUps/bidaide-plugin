@@ -20,13 +20,21 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.CheckboxAction
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.UserDataHolder
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VirtualFile
+import java.io.File
 
 object PrReviewDiff {
     const val ADD_COMMENT_ACTION_ID = "Bidaide.Pr.AddComment"
@@ -34,8 +42,11 @@ object PrReviewDiff {
     /** Run by the diff extension when the request reaches the screen, whichever way the user navigated to it. */
     val ON_SHOWN: Key<Runnable> = Key.create("Bidaide.PrReview.onShown")
 
-    /** Opens the review window for [pr]: file tree, threads and the IDE diff viewer with inline comments. */
-    fun open(project: Project, pr: GhPullRequest) {
+    /**
+     * Opens the review window for [pr]: file tree, threads and the IDE diff viewer with inline comments. [workDir] is
+     * the project's repository unless given (a PR worktree just opened, before git has registered it).
+     */
+    fun open(project: Project, pr: GhPullRequest, workDir: File? = null) {
         val base = pr.baseRefOid
         val head = pr.headRefOid
         if (base.isNullOrBlank() || head.isNullOrBlank()) {
@@ -44,7 +55,7 @@ object PrReviewDiff {
         }
         GhCli.async(
             project, BidaideBundle.message("github.review.preparing", pr.number),
-            work = { PrReviewSession.load(project, GhRepoContext.requireWorkDir(project), pr, base, head) },
+            work = { PrReviewSession.load(project, workDir ?: GhRepoContext.requireWorkDir(project), pr, base, head) },
         ) { session ->
             if (session.files.isEmpty()) {
                 Notifier.info(project, "GitHub", BidaideBundle.message("github.review.noFiles", pr.number))
@@ -55,11 +66,11 @@ object PrReviewDiff {
     }
 
     /** Re-reads the PR (its head may have moved) and opens a fresh review window. */
-    fun reopen(project: Project, number: Int) {
+    fun reopen(project: Project, number: Int, workDir: File? = null) {
         GhCli.async(
             project, BidaideBundle.message("github.review.reloading", number),
-            work = { GhJson.pullRequest(GhCli.run(GhRepoContext.requireWorkDir(project), GhCommands.prView(number))) },
-        ) { open(project, it) }
+            work = { GhJson.pullRequest(GhCli.run(workDir ?: GhRepoContext.requireWorkDir(project), GhCommands.prView(number))) },
+        ) { open(project, it, workDir) }
     }
 }
 
@@ -108,8 +119,23 @@ class PrFileDiffProducer(
 
     private fun empty(): DiffContent = DiffContentFactory.getInstance().createEmpty()
 
-    private fun content(path: String, ref: String, type: FileType): DiffContent =
-        DiffContentFactory.getInstance().create(session.project, GhCli.run(session.workDir, GhCommands.fileContent(path, ref)), type)
+    private fun content(path: String, ref: String, type: FileType): DiffContent {
+        val text = GhCli.run(session.workDir, GhCommands.fileContent(path, ref))
+        // The head side is the file on disk when the checkout holds exactly that version (the PR's worktree, or its
+        // branch checked out): the diff then has the project's code insight, ⌘-click and Find Usages included.
+        if (ref == session.headSha) localFile(path, text)?.let { return DiffContentFactory.getInstance().create(session.project, it) }
+        return DiffContentFactory.getInstance().create(session.project, text, type)
+    }
+
+    /** The project's own copy of [path] when it reads exactly [text]; null for anything else. */
+    private fun localFile(path: String, text: String): VirtualFile? {
+        val file = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(File(session.workDir, path))?.takeIf { !it.isDirectory } ?: return null
+        val local = ApplicationManager.getApplication().runReadAction(Computable {
+            // Outside the project's sources it would get no code insight anyway.
+            if (ProjectFileIndex.getInstance(session.project).isInContent(file)) FileDocumentManager.getInstance().getDocument(file)?.text else null
+        })
+        return file.takeIf { local == StringUtil.convertLineSeparators(text) }
+    }
 }
 
 /** The "Viewed" checkbox of github.com, in the diff toolbar. */

@@ -11,8 +11,10 @@ import com.bidaide.gh.GhPrFile
 import com.bidaide.gh.GhReviewCommands
 import com.bidaide.gh.GhReviewThread
 import com.bidaide.gh.ReviewEvent
+import com.bidaide.github.pr.PrWorktrees
 import com.bidaide.github.ui.GhLoadingPanel
 import com.bidaide.github.ui.Html
+import com.intellij.ide.util.PropertiesComponent
 import com.intellij.ide.ui.laf.darcula.ui.DarculaButtonUI
 import com.intellij.ui.InplaceButton
 import com.intellij.ui.JBColor
@@ -24,6 +26,8 @@ import com.intellij.diff.chains.SimpleDiffRequestChain
 import com.intellij.diff.impl.CacheDiffRequestChainProcessor
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.IdeActions
+import com.intellij.openapi.actionSystem.CustomShortcutSet
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.project.DumbAwareAction
@@ -38,7 +42,9 @@ import com.intellij.ui.CollectionListModel
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.DoubleClickListener
+import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.OnePixelSplitter
+import com.intellij.ui.SearchTextField
 import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBLabel
@@ -50,12 +56,15 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.tree.TreeUtil
 import java.awt.BorderLayout
 import java.awt.FlowLayout
+import java.io.File
 import java.awt.event.MouseEvent
+import java.awt.event.KeyEvent
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JList
 import javax.swing.JPanel
 import javax.swing.JTree
+import javax.swing.event.DocumentEvent
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreePath
@@ -83,7 +92,9 @@ class PrReviewWindow(private val session: PrReviewSession) {
     /** Bumped on every scope change so file-shown callbacks of a replaced diff are ignored. */
     private var scopeGeneration = 0
 
-    private val fileNodes = ArrayList<DefaultMutableTreeNode>()
+    /** Tree node of each file shown, by its index in [scope]; files hidden by the filter have none. */
+    private val fileNodes = LinkedHashMap<Int, DefaultMutableTreeNode>()
+    private val fileFilter = SearchTextField(false)
     private val tree = Tree(buildTreeModel())
     private val main = OnePixelSplitter(false, "Bidaide.PrReview.main", 0.24f)
     /** Combo entry standing for "the whole pull request". */
@@ -101,34 +112,47 @@ class PrReviewWindow(private val session: PrReviewSession) {
     private val diffHolder = JPanel(BorderLayout())
     private val diffLoading = GhLoadingPanel(diffHolder, frame)
 
+    /** The side panel (files and conversations) and the stripe that brings it back once hidden, as with a tool window. */
+    private val sidePanel = JPanel(BorderLayout())
+    private val stripe = JPanel(BorderLayout())
+
     fun show() {
         configureTree()
         configureThreads()
+        configureFilter()
 
         val left = OnePixelSplitter(true, "Bidaide.PrReview.left", 0.6f).apply {
-            firstComponent = titled(BidaideBundle.message("github.review.files"), JBScrollPane(tree))
+            firstComponent = titled(BidaideBundle.message("github.review.files"), JPanel(BorderLayout()).apply {
+                add(fileFilter.apply { border = JBUI.Borders.empty(0, 6, 4, 6) }, BorderLayout.NORTH)
+                add(JBScrollPane(tree), BorderLayout.CENTER)
+            })
             secondComponent = titled(BidaideBundle.message("gh.merge.conversations"), JBScrollPane(threadsList))
         }
-        main.firstComponent = JPanel(BorderLayout()).apply {
-            add(header(), BorderLayout.NORTH)
-            add(left, BorderLayout.CENTER)
-        }
+        sidePanel.add(header(), BorderLayout.NORTH)
+        sidePanel.add(left, BorderLayout.CENTER)
+        main.firstComponent = sidePanel
         diffHolder.add(processor.component, BorderLayout.CENTER)
         main.secondComponent = diffLoading.component
+        configureStripe()
         val root = JPanel(BorderLayout()).apply {
             add(toolbar(), BorderLayout.NORTH)
+            add(stripe, BorderLayout.WEST)
             add(main, BorderLayout.CENTER)
         }
         frame.component = root
         // The window is no editor tab, so the IDE's "Close" (⌘W, Ctrl+F4…) has to be wired to it by hand.
         DumbAwareAction.create { frame.close() }
             .registerCustomShortcutSet(KeymapUtil.getActiveKeymapShortcuts(IdeActions.ACTION_CLOSE), root, frame)
+        // The Project tool window's own shortcut (⌘1, Alt+1) shows and hides the files, where hands expect it.
+        DumbAwareAction.create { setSideVisible(!sidePanel.isVisible) }
+            .registerCustomShortcutSet(KeymapUtil.getActiveKeymapShortcuts("ActivateProjectToolWindow"), root, frame)
+        setSideVisible(!PropertiesComponent.getInstance().getBoolean(SIDE_HIDDEN_KEY))
         frame.preferredFocusedComponent = tree
         Disposer.register(frame, processor)
         session.addListener(frame) { refresh() }
         refresh()
         processor.updateRequest()
-        fileNodes.firstOrNull()?.let { tree.selectionPath = TreePath(it.path) }
+        fileNodes.values.firstOrNull()?.let { tree.selectionPath = TreePath(it.path) }
         frame.show()
     }
 
@@ -137,12 +161,36 @@ class PrReviewWindow(private val session: PrReviewSession) {
         add(content, BorderLayout.CENTER)
     }
 
+    // --- Hiding the side panel ---
+
+    private fun configureStripe() {
+        val show = InplaceButton(BidaideBundle.message("github.review.files.show"), AllIcons.Toolwindows.ToolWindowChanges) { setSideVisible(true) }
+        stripe.border = JBUI.Borders.compound(JBUI.Borders.customLineRight(JBColor.border()), JBUI.Borders.empty(6, 4))
+        stripe.add(show, BorderLayout.NORTH)
+    }
+
+    /** Hidden, the diff takes the whole window; the choice is remembered for the next review. */
+    private fun setSideVisible(visible: Boolean) {
+        sidePanel.isVisible = visible
+        stripe.isVisible = !visible
+        PropertiesComponent.getInstance().setValue(SIDE_HIDDEN_KEY, !visible)
+        main.revalidate()
+        main.repaint()
+        if (visible) tree.requestFocusInWindow()
+    }
+
     /** Title and branches of the pull request above the file tree, as in the IDE's own pull request view. */
     private fun header(): JComponent = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
         border = JBUI.Borders.empty(10, 10, 6, 10)
-        add(JBLabel("<html><b>${Html.esc(session.pr.title)}</b> <font color=\"gray\">#${session.number}</font></html>").apply {
+        val title = JBLabel("<html><b>${Html.esc(session.pr.title)}</b> <font color=\"gray\">#${session.number}</font></html>").apply {
             font = JBUI.Fonts.label().biggerOn(2f)
+        }
+        // The "—" of a tool window header.
+        val hide = InplaceButton(BidaideBundle.message("github.review.files.hide"), AllIcons.General.HideToolWindow) { setSideVisible(false) }
+        add(JPanel(BorderLayout(JBUI.scale(6), 0)).apply {
+            add(title, BorderLayout.CENTER)
+            add(JPanel(BorderLayout()).apply { add(hide, BorderLayout.NORTH) }, BorderLayout.EAST)
         }.leftAligned())
         add(JBLabel("${session.pr.headRefName} → ${session.pr.baseRefName}", AllIcons.Vcs.Branch, SwingConstants.LEFT).apply {
             foreground = UIUtil.getContextHelpForeground()
@@ -156,6 +204,13 @@ class PrReviewWindow(private val session: PrReviewSession) {
         val reload = InplaceButton(BidaideBundle.message("github.review.reload.tooltip"), AllIcons.Actions.ForceRefresh) {
             frame.close()
             PrReviewDiff.reopen(project, session.number)
+        }
+        // Not needed when this review already runs in the PR's worktree.
+        val inWorktree = PrWorktrees.isInside(PrWorktrees.root(File(PathManager.getSystemPath())), session.workDir)
+        val navigate = JButton(BidaideBundle.message("github.pr.button.reviewInWorktree"), AllIcons.Actions.MoveToWindow).apply {
+            toolTipText = BidaideBundle.message("github.review.worktree.tooltip")
+            isVisible = !inWorktree
+            addActionListener { PrReviewWorktree.open(project, session.pr) }
         }
         scopeCombo.renderer = SimpleListCellRenderer.create("") { commit ->
             if (commit === allChanges) BidaideBundle.message("github.review.allChanges") else "${commit.oid.take(7)}  ${commit.messageHeadline.take(70)}"
@@ -173,6 +228,7 @@ class PrReviewWindow(private val session: PrReviewSession) {
             add(JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(8), JBUI.scale(4))).apply {
                 add(refresh)
                 add(reload)
+                add(navigate)
                 add(submitButton)
             }, BorderLayout.EAST)
         }
@@ -218,12 +274,10 @@ class PrReviewWindow(private val session: PrReviewSession) {
         diffHolder.revalidate()
         diffHolder.repaint()
         Disposer.dispose(previous)
-        fileNodes.clear()
-        tree.model = buildTreeModel()
-        TreeUtil.expandAll(tree)
         currentIndex = 0
+        rebuildTree()
         processor.updateRequest()
-        fileNodes.firstOrNull()?.let { tree.selectionPath = TreePath(it.path) }
+        fileNodes.values.firstOrNull()?.let { tree.selectionPath = TreePath(it.path) }
         refresh()
     }
 
@@ -231,7 +285,7 @@ class PrReviewWindow(private val session: PrReviewSession) {
     private fun fileShown(index: Int) {
         if (index == currentIndex) return
         currentIndex = index
-        fileNodes.getOrNull(index)?.let {
+        fileNodes[index]?.let {
             val path = TreePath(it.path)
             tree.selectionPath = path
             tree.scrollPathToVisible(path)
@@ -256,17 +310,48 @@ class PrReviewWindow(private val session: PrReviewSession) {
     private fun buildTreeModel(): DefaultTreeModel {
         val root = DefaultMutableTreeNode("root")
         val directories = LinkedHashMap<String, DefaultMutableTreeNode>()
+        fileNodes.clear()
+        val query = fileFilter.text
         scope.files.forEachIndexed { index, file ->
+            if (!FileFilter.matches(file.filename, query)) return@forEachIndexed
             val directory = file.filename.substringBeforeLast('/', "")
             val parent = if (directory.isEmpty()) root else directories.getOrPut(directory) {
                 DefaultMutableTreeNode(directory).also(root::add)
             }
             DefaultMutableTreeNode(FileNode(index, file)).also {
                 parent.add(it)
-                fileNodes += it
+                fileNodes[index] = it
             }
         }
         return DefaultTreeModel(root)
+    }
+
+    /** Re-applies the filter, keeping the file on screen selected when it is still listed. */
+    private fun rebuildTree() {
+        tree.model = buildTreeModel()
+        TreeUtil.expandAll(tree)
+        fileNodes[currentIndex]?.let {
+            val path = TreePath(it.path)
+            tree.selectionPath = path
+            tree.scrollPathToVisible(path)
+        }
+    }
+
+    private fun configureFilter() {
+        fileFilter.textEditor.emptyText.text = BidaideBundle.message("github.review.files.filter")
+        fileFilter.addDocumentListener(object : DocumentAdapter() {
+            override fun textChanged(e: DocumentEvent) = rebuildTree()
+        })
+        tree.emptyText.text = BidaideBundle.message("github.review.files.noMatch")
+        // ⌘F (the IDE's Find) over the files jumps to the filter; Enter or ↓ from there goes on to the tree.
+        DumbAwareAction.create { fileFilter.requestFocusInWindow() }
+            .registerCustomShortcutSet(KeymapUtil.getActiveKeymapShortcuts(IdeActions.ACTION_FIND), sidePanel, frame)
+        DumbAwareAction.create {
+            if (tree.selectionPath == null) fileNodes.values.firstOrNull()?.let { tree.selectionPath = TreePath(it.path) }
+            tree.requestFocusInWindow()
+        }.registerCustomShortcutSet(CustomShortcutSet(KeyEvent.VK_ENTER, 0), fileFilter.textEditor)
+        DumbAwareAction.create { tree.requestFocusInWindow() }
+            .registerCustomShortcutSet(CustomShortcutSet(KeyEvent.VK_DOWN, 0), fileFilter.textEditor)
     }
 
     private fun configureTree() {
@@ -318,7 +403,9 @@ class PrReviewWindow(private val session: PrReviewSession) {
     }
 
     private fun selectFile(path: String): Boolean {
-        val node = fileNodes.firstOrNull { (it.userObject as FileNode).file.filename == path } ?: return false
+        // A conversation on a file the filter hides: drop the filter so it can be shown.
+        if (fileNodes.values.none { (it.userObject as FileNode).file.filename == path } && fileFilter.text.isNotEmpty()) fileFilter.text = ""
+        val node = fileNodes.values.firstOrNull { (it.userObject as FileNode).file.filename == path } ?: return false
         val treePath = TreePath(node.path)
         tree.selectionPath = treePath
         tree.scrollPathToVisible(treePath)
@@ -394,6 +481,16 @@ class PrReviewWindow(private val session: PrReviewSession) {
             BidaideBundle.message("common.cancel"), Messages.getWarningIcon(),
         )
         if (answer == Messages.YES) session.mutate(BidaideBundle.message("github.review.discarding"), GhReviewCommands.discardPending(reviewId))
+    }
+
+    /** Matches a path when it contains every word of [query], ignoring case: "login view" finds `ui/login/LoginView.kt`. */
+    internal object FileFilter {
+        fun matches(path: String, query: String): Boolean =
+            query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.all { path.contains(it, ignoreCase = true) }
+    }
+
+    private companion object {
+        const val SIDE_HIDDEN_KEY = "Bidaide.PrReview.sideHidden"
     }
 }
 
