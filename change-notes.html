@@ -1,3 +1,24 @@
+<h3>0.4 — Review a pull request with full code navigation</h3>
+
+<p><b>⌘-click and Find Usages on the pull request's code</b></p>
+<ul>
+  <li>New Review with Code Navigation, in the review window and in the pull request's actions: the pull request goes into a worktree of its own and opens as a separate project, with its review. Its diff shows the real files, so ⌘-click, Find Usages and the rest of the IDE's code insight work on the code of the pull request.</li>
+  <li>Your branch and your uncommitted changes stay as they are: review feature/registry while you keep working on feature/login.</li>
+  <li>It reuses the worktree of Test on Device, and Delete Pull Request Worktrees cleans both up.</li>
+  <li>When your copy already has the pull request's version of a file, its review diff shows the real file too.</li>
+</ul>
+
+<p><b>The review window</b></p>
+<ul>
+  <li>Filter the changed files: every word you type must appear in the path, so “login view” finds ui/login/LoginView.kt. ⌘F jumps to the filter, Enter or ↓ back to the files.</li>
+  <li>Hide the files and conversations to give the diff the whole window, with the “—” of their header, and bring them back from the stripe on the left or with ⌘1, as with the Project tool window. The choice is remembered.</li>
+</ul>
+
+<p><b>Fixes</b></p>
+<ul>
+  <li>The pull request list shows people's avatars again instead of only their initials, and retries an avatar that failed to download.</li>
+</ul>
+
 <h3>0.3 — Code review that feels like the IDE's own</h3>
 
 <p><b>Commenting in the diff</b></p>
