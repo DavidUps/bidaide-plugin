@@ -70,8 +70,15 @@ object AdbShell {
     /** `input text` treats spaces as argument separators and wants them as %s; everything else is shell-quoted. */
     internal fun inputTextCommand(text: String): String = "input text ${quote(text.replace(" ", "%s"))}"
 
-    /** Types [text] into whatever has focus on the device. Only reliable for ASCII: `input` cannot send other characters. */
+    /**
+     * Types [text] into whatever has focus on the device. With Android CLI any character works (and the field is
+     * cleared first); without it, `input` is only reliable for ASCII.
+     */
     fun inputText(device: IDevice, text: String, pressEnter: Boolean) {
+        if (AndroidCli.isAvailable) {
+            AndroidCli.run(AndroidCli.inputTextArgs(device.serialNumber, text, pressEnter))
+            return
+        }
         val out = run(device, inputTextCommand(text))
         if (out.contains("Exception") || out.contains("Error")) throw AdbException(out.lineSequence().first())
         if (pressEnter) run(device, "input keyevent KEYCODE_ENTER")

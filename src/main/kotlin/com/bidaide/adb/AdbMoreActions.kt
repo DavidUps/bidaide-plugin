@@ -104,7 +104,7 @@ class AdbSendTextAction : AdbBaseAction() {
             }
 
             override fun createCenterPanel(): JComponent = panel {
-                row(BidaideBundle.message("adb.sendText.text")) { cell(combo).align(AlignX.FILL).comment(BidaideBundle.message("adb.sendText.comment")) }
+                row(BidaideBundle.message("adb.sendText.text")) { cell(combo).align(AlignX.FILL).comment(BidaideBundle.message(if (AndroidCli.isAvailable) "adb.sendText.commentCli" else "adb.sendText.comment")) }
                 row { cell(enterBox) }
             }
 
@@ -114,7 +114,7 @@ class AdbSendTextAction : AdbBaseAction() {
                 val text = combo.editor.item?.toString().orEmpty()
                 return when {
                     text.isEmpty() -> ValidationInfo(BidaideBundle.message("adb.sendText.empty"), combo)
-                    text.any { it.code > 126 || it.code < 32 } -> ValidationInfo(BidaideBundle.message("adb.sendText.notAscii"), combo)
+                    !AndroidCli.isAvailable && text.any { it.code > 126 || it.code < 32 } -> ValidationInfo(BidaideBundle.message("adb.sendText.notAscii"), combo)
                     else -> null
                 }
             }
