@@ -33,9 +33,15 @@ object AdbFiles {
 
     /** Saves a PNG screenshot and puts the image on the clipboard. */
     fun screenshot(device: IDevice): File {
-        val image = device.screenshot?.asBufferedImage() ?: throw AdbException(BidaideBundle.message("adb.files.noScreenshot"))
         val file = File(captureDir(), "screenshot-${safe(device.name)}-${stamp()}.png")
-        ImageIO.write(image, "png", file)
+        val image = if (AndroidCli.isAvailable) {
+            AndroidCli.run(AndroidCli.screenshotArgs(device.serialNumber, file))
+            ImageIO.read(file) ?: throw AdbException(BidaideBundle.message("adb.files.noScreenshot"))
+        } else {
+            val captured = device.screenshot?.asBufferedImage() ?: throw AdbException(BidaideBundle.message("adb.files.noScreenshot"))
+            ImageIO.write(captured, "png", file)
+            captured
+        }
         ApplicationManager.getApplication().invokeLater { CopyPasteManager.getInstance().setContents(ImageTransferable(image)) }
         return file
     }

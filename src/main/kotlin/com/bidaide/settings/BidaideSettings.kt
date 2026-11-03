@@ -16,6 +16,9 @@ class BidaideSettings : PersistentStateComponent<BidaideSettings.State> {
         /** Explicit path to the `gh` binary; blank means auto-detect. */
         var ghPath: String = ""
 
+        /** Explicit path to the Android CLI `android` binary; blank means auto-detect. */
+        var androidCliPath: String = ""
+
         /** Notify about review requests and about checks/reviews of the user's own pull requests. */
         var notificationsEnabled: Boolean = true
         var pollMinutes: Int = 5
@@ -45,6 +48,12 @@ class BidaideSettings : PersistentStateComponent<BidaideSettings.State> {
         get() = state.ghPath
         set(value) {
             state.ghPath = value.trim()
+        }
+
+    var androidCliPath: String
+        get() = state.androidCliPath
+        set(value) {
+            state.androidCliPath = value.trim()
         }
 
     var notificationsEnabled: Boolean
