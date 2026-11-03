@@ -1,3 +1,12 @@
+<h3>0.5 — Android CLI for installs, screenshots and typing</h3>
+
+<p><b>Android CLI</b></p>
+<ul>
+  <li>When Android CLI (the <code>android</code> command) is installed, installing an APK, taking a screenshot and sending text to the device go through it instead of ADB. Everything else keeps using ADB, since Android CLI has no equivalent.</li>
+  <li>Send Text accepts any character with Android CLI, accents and emoji included. It replaces what the focused field holds instead of adding to it.</li>
+  <li>Bidaide finds <code>android</code> on its own; set its path in Settings → Tools → Bidaide → ADB if it is somewhere else. Without it, everything works through ADB as before.</li>
+</ul>
+
 <h3>0.4 — Review a pull request with full code navigation</h3>
 
 <p><b>⌘-click and Find Usages on the pull request's code</b></p>
