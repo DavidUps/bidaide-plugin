@@ -95,7 +95,7 @@ class AdbDatabaseAction : AdbBaseAction() {
                 },
             ) { files ->
                 when (files.size) {
-                    0 -> Notifier.info(project, "ADB", BidaideBundle.message("adb.db.none", packageName, AdbTargetResolver.deviceLabel(device)))
+                    0 -> Notifier.info(project, AndroidCli.TITLE, BidaideBundle.message("adb.db.none", packageName, AdbTargetResolver.deviceLabel(device)))
                     1 -> DatabaseBrowser(project, packageName, files.single()).show()
                     else -> JBPopupFactory.getInstance().createPopupChooserBuilder(files)
                         .setTitle(BidaideBundle.message("adb.db.title", packageName))

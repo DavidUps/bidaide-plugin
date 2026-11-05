@@ -46,9 +46,9 @@ object AdbFavorites {
     fun ordered(selected: Set<String>, candidates: List<FavoriteCandidate>): List<String> =
         candidates.map { it.id }.filter { it in selected }.distinct()
 
-    /** Whether [candidate] matches the filter [query]: every word, ignoring case, accents and the "ADB:" prefix. */
+    /** Whether [candidate] matches the filter [query]: every word, ignoring case, accents and the "Android CLI:" prefix. */
     fun matches(candidate: FavoriteCandidate, query: String): Boolean {
-        val text = fold(candidate.text.removePrefix("ADB:"))
+        val text = fold(candidate.text.removePrefix(AndroidCli.TITLE + ":"))
         return fold(query).split(' ').filter { it.isNotEmpty() }.all { it in text }
     }
 
@@ -104,7 +104,7 @@ class AdbManageFavoritesAction : AdbBaseAction() {
 internal class AdbFavoritesDialog private constructor(project: Project?, candidates: List<FavoriteCandidate>, selected: Set<String>) :
     DialogWrapper(project) {
 
-    private val boxes = candidates.map { it to JBCheckBox(it.text.removePrefix("ADB: "), it.id in selected) }
+    private val boxes = candidates.map { it to JBCheckBox(it.text.removePrefix(AndroidCli.TITLE + ": "), it.id in selected) }
     private val filter = SearchTextField(false)
 
     init {

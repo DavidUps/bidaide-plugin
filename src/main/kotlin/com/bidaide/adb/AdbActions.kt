@@ -41,7 +41,7 @@ private val LOG = logger<AdbTasks>()
 /** Runs ADB work in the background on one or several devices and reports each result as a notification. */
 object AdbTasks {
     fun run(project: Project, title: String, devices: List<IDevice>, packageName: String?, work: (AdbContext) -> String) {
-        object : Task.Backgroundable(project, "ADB: $title", false) {
+        object : Task.Backgroundable(project, "${AndroidCli.TITLE}: $title", false) {
             override fun run(indicator: ProgressIndicator) {
                 for (device in devices) {
                     val context = AdbContext(project, device, packageName)
@@ -49,7 +49,7 @@ object AdbTasks {
                         report(project, "${work(context)} — ${AdbTargetResolver.deviceLabel(device)}", context.resultFile)
                     } catch (e: Exception) {
                         LOG.info("ADB task '$title' failed", e)
-                        Notifier.error(project, "ADB: $title", "${e.message ?: e.javaClass.simpleName} — ${AdbTargetResolver.deviceLabel(device)}")
+                        Notifier.error(project, "${AndroidCli.TITLE}: $title", "${e.message ?: e.javaClass.simpleName} — ${AdbTargetResolver.deviceLabel(device)}")
                     }
                 }
             }
@@ -58,7 +58,7 @@ object AdbTasks {
 
     /** Runs [work] in the background and hands its result to [onSuccess] on the EDT; failures become notifications. */
     fun <T> fetch(project: Project, title: String, work: () -> T, onSuccess: (T) -> Unit) {
-        object : Task.Backgroundable(project, "ADB: $title", false) {
+        object : Task.Backgroundable(project, "${AndroidCli.TITLE}: $title", false) {
             private var result: Result<T>? = null
 
             override fun run(indicator: ProgressIndicator) {
@@ -68,7 +68,7 @@ object AdbTasks {
             override fun onFinished() {
                 result?.onSuccess(onSuccess)?.onFailure {
                     LOG.info("ADB task '$title' failed", it)
-                    Notifier.error(project, "ADB: $title", it.message ?: it.javaClass.simpleName)
+                    Notifier.error(project, "${AndroidCli.TITLE}: $title", it.message ?: it.javaClass.simpleName)
                 }
             }
         }.queue()
@@ -76,7 +76,7 @@ object AdbTasks {
 
     private fun report(project: Project, message: String, file: File?) {
         val notification = NotificationGroupManager.getInstance().getNotificationGroup("Bidaide")
-            .createNotification("ADB", message, NotificationType.INFORMATION)
+            .createNotification(AndroidCli.TITLE, message, NotificationType.INFORMATION)
         if (file != null) {
             notification.addAction(NotificationAction.createSimple(RevealFileAction.getActionName()) { RevealFileAction.openFile(file) })
         }
@@ -230,7 +230,7 @@ class AdbReverseAction : AdbBaseAction() {
         ) ?: return
         val ports = input.trim().split(':').map { it.trim() }
         if (input.isNotBlank() && (ports.size > 2 || ports.any { it.toIntOrNull() == null })) {
-            Notifier.warn(project, "ADB", BidaideBundle.message("adb.reverse.invalid", input))
+            Notifier.warn(project, AndroidCli.TITLE, BidaideBundle.message("adb.reverse.invalid", input))
             return
         }
         if (input.isNotBlank()) history.remember(input.trim())
@@ -286,7 +286,7 @@ class AdbPairAction : AdbBaseAction() {
                     val messages = ArrayList<String>()
                     if (pairAddress.text.isNotBlank()) messages += AdbFiles.adb(project, "pair", pairAddress.text.trim(), code.text.trim())
                     if (connectAddress.text.isNotBlank()) messages += AdbFiles.adb(project, "connect", connectAddress.text.trim())
-                    Notifier.info(project, "ADB", messages.joinToString("<br>"))
+                    Notifier.info(project, AndroidCli.TITLE, messages.joinToString("<br>"))
                 } catch (ex: Exception) {
                     Notifier.error(project, BidaideBundle.message("adb.pair.error"), ex.message ?: ex.javaClass.simpleName)
                 }
@@ -322,7 +322,7 @@ class AdbCustomCommandsGroup : ActionGroup(), DumbAware {
         CustomAdbCommand.parse(BidaideSettings.getInstance().customAdbCommands).map { command ->
             object : AdbBaseAction() {
                 init {
-                    templatePresentation.text = "ADB: ${command.name}"
+                    templatePresentation.text = "${AndroidCli.TITLE}: ${command.name}"
                     templatePresentation.description = command.command
                 }
 
@@ -351,7 +351,7 @@ class AdbForgetSelectionAction : AdbBaseAction() {
             deviceSerial = null
             packageName = null
         }
-        Notifier.info(project, "ADB", BidaideBundle.message("adb.forget.done"))
+        Notifier.info(project, AndroidCli.TITLE, BidaideBundle.message("adb.forget.done"))
     }
 }
 
@@ -361,7 +361,7 @@ class AdbPopupAction : AdbBaseAction() {
         val project = e.project ?: return
         val group = ActionManager.getInstance().getAction(OPERATIONS_GROUP_ID) as ActionGroup
         JBPopupFactory.getInstance()
-            .createActionGroupPopup("ADB — Bidaide", group, e.dataContext, JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, true)
+            .createActionGroupPopup("${AndroidCli.TITLE} — Bidaide", group, e.dataContext, JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, true)
             .showCenteredInCurrentWindow(project)
     }
 

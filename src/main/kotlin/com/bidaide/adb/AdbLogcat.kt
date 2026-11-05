@@ -43,7 +43,7 @@ object AdbLogcat {
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Bidaide")
         if (toolWindow == null) {
             handler.destroyProcess()
-            Notifier.warn(project, "ADB", BidaideBundle.message("adb.logcat.noToolWindow"))
+            Notifier.warn(project, AndroidCli.TITLE, BidaideBundle.message("adb.logcat.noToolWindow"))
             return
         }
         val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console

@@ -65,7 +65,7 @@ class AdbLocationAction : AdbBaseAction() {
         ) ?: return
         val position = parsePosition(input)
         if (position == null) {
-            Notifier.warn(project, "ADB", BidaideBundle.message("adb.location.invalid", input))
+            Notifier.warn(project, AndroidCli.TITLE, BidaideBundle.message("adb.location.invalid", input))
             return
         }
         history.remember(input.trim())
@@ -211,7 +211,7 @@ class AdbProfilesGroup : ActionGroup(), DumbAware {
                 override fun actionPerformed(e: AnActionEvent) {
                     val project = e.project ?: return
                     profile.problem()?.let {
-                        Notifier.warn(project, "ADB", BidaideBundle.message("adb.profile.problem", profile.name, it))
+                        Notifier.warn(project, AndroidCli.TITLE, BidaideBundle.message("adb.profile.problem", profile.name, it))
                         return
                     }
                     AdbTargetResolver.resolve(project, profile.needsPackage) { devices, packageName ->

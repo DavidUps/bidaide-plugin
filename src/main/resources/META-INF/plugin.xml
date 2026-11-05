@@ -3,10 +3,10 @@
     <name>Bidaide</name>
     <vendor>David Arribas</vendor>
     <description><![CDATA[
-        GitHub (pull requests, issues, open in GitHub, gists) powered by the GitHub CLI, plus quick ADB operations
+        GitHub (pull requests, issues, open in GitHub, gists) powered by the GitHub CLI, plus quick Android CLI operations
         for the app you are working on, in a single plugin.
         <br/><br/>
-        In IntelliJ IDEA only the GitHub part is available. The ADB operations, installing APKs and testing a pull
+        In IntelliJ IDEA only the GitHub part is available. The Android CLI operations, installing APKs and testing a pull
         request on a device need Android Studio.
     ]]></description>
 

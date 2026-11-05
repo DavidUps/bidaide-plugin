@@ -75,7 +75,7 @@ class BidaideConfigurable : BoundConfigurable(BidaideBundle.message("settings.di
                 }
             }
             // Android Studio only (see AndroidBridge).
-            if (android != null) group("ADB") {
+            if (android != null) group("Android CLI") {
                 row(BidaideBundle.message("settings.androidCli.path")) {
                     textFieldWithBrowseButton(FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor().withTitle(BidaideBundle.message("settings.androidCli.path.title")))
                         .bindText(settings::androidCliPath)
