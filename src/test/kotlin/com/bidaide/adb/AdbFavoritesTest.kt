@@ -7,9 +7,9 @@ import org.junit.Test
 
 class AdbFavoritesTest {
     private val candidates = listOf(
-        FavoriteCandidate("Bidaide.Adb.Kill", "ADB: Matar app"),
-        FavoriteCandidate("Bidaide.Adb.ClearCache", "ADB: Limpiar caché"),
-        FavoriteCandidate("Bidaide.Adb.DarkMode", "ADB: Alternar modo oscuro"),
+        FavoriteCandidate("Bidaide.Adb.Kill", "Android CLI: Matar app"),
+        FavoriteCandidate("Bidaide.Adb.ClearCache", "Android CLI: Limpiar caché"),
+        FavoriteCandidate("Bidaide.Adb.DarkMode", "Android CLI: Alternar modo oscuro"),
     )
 
     @Test
@@ -31,7 +31,7 @@ class AdbFavoritesTest {
     }
 
     @Test
-    fun `selection follows the order of the ADB group and ignores unknown ids`() {
+    fun `selection follows the order of the Android CLI group and ignores unknown ids`() {
         assertEquals(
             listOf("Bidaide.Adb.Kill", "Bidaide.Adb.DarkMode"),
             AdbFavorites.ordered(setOf("Bidaide.Adb.DarkMode", "Unknown", "Bidaide.Adb.Kill"), candidates),
@@ -39,7 +39,7 @@ class AdbFavoritesTest {
     }
 
     @Test
-    fun `filter ignores case, accents, word order and the ADB prefix`() {
+    fun `filter ignores case, accents, word order and the Android CLI prefix`() {
         val cache = candidates[1]
         assertTrue(AdbFavorites.matches(cache, "cache"))
         assertTrue(AdbFavorites.matches(cache, "CACHÉ limpiar"))

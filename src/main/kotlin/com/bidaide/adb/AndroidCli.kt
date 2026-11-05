@@ -14,6 +14,9 @@ import java.io.File
  * CLI has no equivalent for. When the binary is missing, callers fall back to ddmlib.
  */
 object AndroidCli {
+    /** Name of this part of the plugin in titles, notifications and action prefixes. */
+    const val TITLE = "Android CLI"
+
     private val LOG = logger<AndroidCli>()
     private const val TIMEOUT_MILLIS = 120_000
 
@@ -58,4 +61,8 @@ object AndroidCli {
     /** Types into the focused element. Note `input text` clears the field first, unlike `adb shell input text`. */
     internal fun inputTextArgs(serial: String, text: String, submit: Boolean): List<String> =
         listOf("input", "--device=$serial", "text", text, "focused=true") + if (submit) listOf("--submit") else emptyList()
+
+    /** Android Device Hub; without a serial it picks an online device itself and lets the user switch in its window. */
+    internal fun deviceHubArgs(serial: String?): List<String> =
+        listOf("device", "hub") + listOfNotNull(serial?.let { "--device=$it" })
 }

@@ -49,6 +49,7 @@
             <action id="Bidaide.Adb.RevokePermissionsRestart" class="com.bidaide.adb.AdbRevokePermissionsRestartAction"/>
             <separator/>
             <action id="Bidaide.Adb.DeepLink" class="com.bidaide.adb.AdbDeepLinkAction"/>
+            <action id="Bidaide.Adb.DeviceHub" class="com.bidaide.adb.AdbDeviceHubAction"/>
             <action id="Bidaide.Adb.Screenshot" class="com.bidaide.adb.AdbScreenshotAction"/>
             <action id="Bidaide.Adb.Record" class="com.bidaide.adb.AdbRecordAction"/>
             <action id="Bidaide.Adb.Logcat" class="com.bidaide.adb.AdbLogcatAction"/>

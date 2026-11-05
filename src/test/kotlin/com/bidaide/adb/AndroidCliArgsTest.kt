@@ -26,4 +26,10 @@ class AndroidCliArgsTest {
         assertEquals(listOf("input", "--device=R58M", "text", "hola señor", "focused=true"), AndroidCli.inputTextArgs("R58M", "hola señor", false))
         assertEquals(listOf("input", "--device=R58M", "text", "x", "focused=true", "--submit"), AndroidCli.inputTextArgs("R58M", "x", true))
     }
+
+    @Test
+    fun `device hub targets one device or lets the hub choose`() {
+        assertEquals(listOf("device", "hub", "--device=emulator-5554"), AndroidCli.deviceHubArgs("emulator-5554"))
+        assertEquals(listOf("device", "hub"), AndroidCli.deviceHubArgs(null))
+    }
 }

@@ -58,7 +58,7 @@ object AdbTargetResolver {
         val devices = onlineDevices(project)
         val remembered = devices.firstOrNull { it.serialNumber == memory.deviceSerial }
         when {
-            devices.isEmpty() -> Notifier.warn(project, "ADB", BidaideBundle.message("adb.target.noDevices"))
+            devices.isEmpty() -> Notifier.warn(project, AndroidCli.TITLE, BidaideBundle.message("adb.target.noDevices"))
             devices.size == 1 -> onChosen(devices)
             memory.deviceSerial == AdbSelectionMemory.ALL_DEVICES -> onChosen(devices)
             remembered != null -> onChosen(listOf(remembered))
@@ -82,7 +82,7 @@ object AdbTargetResolver {
         val remembered = ids.firstOrNull { it == memory.packageName }
         when {
             ids.isEmpty() -> Notifier.warn(
-                project, "ADB", BidaideBundle.message("adb.target.noModules")
+                project, AndroidCli.TITLE, BidaideBundle.message("adb.target.noModules")
             )
             ids.size == 1 -> onChosen(ids.single())
             remembered != null -> onChosen(remembered)

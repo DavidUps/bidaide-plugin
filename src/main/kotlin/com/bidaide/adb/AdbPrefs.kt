@@ -86,7 +86,7 @@ class AdbPrefsAction : AdbBaseAction() {
             val device = devices.first()
             AdbTasks.fetch(project, BidaideBundle.message("adb.prefs.task", packageName), work = { AdbPrefs.list(device, packageName) }) { files ->
                 when (files.size) {
-                    0 -> Notifier.info(project, "ADB", BidaideBundle.message("adb.prefs.none", packageName, AdbTargetResolver.deviceLabel(device)))
+                    0 -> Notifier.info(project, AndroidCli.TITLE, BidaideBundle.message("adb.prefs.none", packageName, AdbTargetResolver.deviceLabel(device)))
                     1 -> edit(project, device, packageName, files.single())
                     else -> JBPopupFactory.getInstance().createPopupChooserBuilder(files)
                         .setTitle(BidaideBundle.message("adb.prefs.chooserTitle", packageName))
