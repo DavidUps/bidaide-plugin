@@ -213,4 +213,20 @@ class FeaturesTest {
         assertFalse(commands[1].needsPackage)
         assertEquals("dumpsys activity com.app | grep mResumed", commands[0].resolve("com.app"))
     }
+
+    @Test
+    fun `custom command parameters`() {
+        val command = CustomAdbCommand(
+            "Login",
+            """am start -n {package}/.Main --es nif "{nif}" --es birthdate "{birthdate}" --es again "{nif}" -e home ${'$'}{HOME}""",
+        )
+        assertEquals(listOf("nif", "birthdate"), command.parameters)
+        assertTrue(command.needsPackage)
+        assertEquals(
+            """am start -n com.app/.Main --es nif "1" --es birthdate "2" --es again "1" -e home ${'$'}{HOME}""",
+            command.resolve("com.app", mapOf("nif" to "1", "birthdate" to "2")),
+        )
+        assertTrue(CustomAdbCommand.isSensitive("userPassword"))
+        assertFalse(CustomAdbCommand.isSensitive("nif"))
+    }
 }

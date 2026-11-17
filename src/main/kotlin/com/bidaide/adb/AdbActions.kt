@@ -30,11 +30,13 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.ui.components.JBCheckBox
+import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
 import java.io.File
 import javax.swing.JComponent
+import javax.swing.JTextField
 
 private val LOG = logger<AdbTasks>()
 
@@ -295,14 +297,33 @@ class AdbPairAction : AdbBaseAction() {
     }
 }
 
-/** A user-defined shell command from the settings. */
+/**
+ * A user-defined shell command from the settings. `{package}` is the app id; any other `{name}` is a parameter the
+ * user fills in a dialog each time the command runs (the value is inserted as typed, so quote it in the command).
+ */
 class CustomAdbCommand(val name: String, val command: String) {
     val needsPackage: Boolean get() = PACKAGE in command
 
-    fun resolve(packageName: String?): String = command.replace(PACKAGE, packageName.orEmpty())
+    /** Distinct parameter names in order of appearance, without `{package}`. */
+    val parameters: List<String>
+        get() = PARAMETER.findAll(command).map { it.groupValues[1] }.filter { it != "package" }.distinct().toList()
+
+    fun resolve(packageName: String?, values: Map<String, String> = emptyMap()): String =
+        PARAMETER.replace(command) { match ->
+            val key = match.groupValues[1]
+            if (key == "package") packageName.orEmpty() else values[key] ?: match.value
+        }
 
     companion object {
         const val PACKAGE = "{package}"
+
+        // The lookbehind leaves shell expansions such as ${HOME} alone.
+        private val PARAMETER = Regex("""(?<!\$)\{([A-Za-z_][A-Za-z0-9_]*)}""")
+
+        /** Parameters with these words in their name are asked with a hidden field and never remembered. */
+        private val SENSITIVE = Regex("pass|pwd|pin|token|secret", RegexOption.IGNORE_CASE)
+
+        fun isSensitive(parameter: String) = SENSITIVE.containsMatchIn(parameter)
 
         /** One command per line as `Name = command`; blank lines and lines starting with # are skipped. */
         fun parse(text: String): List<CustomAdbCommand> = text.lineSequence()
@@ -311,6 +332,39 @@ class CustomAdbCommand(val name: String, val command: String) {
             .map { CustomAdbCommand(it.substringBefore('=').trim(), it.substringAfter('=').trim()) }
             .filter { it.name.isNotEmpty() && it.command.isNotEmpty() }
             .toList()
+    }
+}
+
+/** Asks for the parameters of a custom command; the last values typed are offered again, except sensitive ones. */
+private class CustomParametersDialog(project: Project, private val command: CustomAdbCommand) : DialogWrapper(project) {
+    private val store = PropertiesComponent.getInstance()
+    private val fields: Map<String, JTextField> = command.parameters.associateWith { parameter ->
+        if (CustomAdbCommand.isSensitive(parameter)) JBPasswordField() else JBTextField(store.getValue(key(parameter)).orEmpty())
+    }
+
+    init {
+        title = command.name
+        setOKButtonText(BidaideBundle.message("adb.custom.run"))
+        init()
+    }
+
+    private fun key(parameter: String) = "Bidaide.Adb.Custom.${command.name}.$parameter"
+
+    override fun createCenterPanel(): JComponent = panel {
+        fields.forEach { (parameter, field) -> row("$parameter:") { cell(field).align(AlignX.FILL) } }
+    }
+
+    override fun getPreferredFocusedComponent(): JComponent? = fields.values.firstOrNull()
+
+    override fun doValidate(): ValidationInfo? =
+        fields.entries.firstOrNull { it.value is JBTextField && it.value.text.isBlank() }
+            ?.let { ValidationInfo(BidaideBundle.message("adb.custom.empty", it.key), it.value) }
+
+    /** Remembers the values and returns them by parameter name. */
+    fun values(): Map<String, String> = fields.mapValues { (parameter, field) ->
+        val value = if (field is JBPasswordField) String(field.password) else field.text.trim()
+        if (!CustomAdbCommand.isSensitive(parameter)) store.setValue(key(parameter), value)
+        value
     }
 }
 
@@ -328,9 +382,16 @@ class AdbCustomCommandsGroup : ActionGroup(), DumbAware {
 
                 override fun actionPerformed(e: AnActionEvent) {
                     val project = e.project ?: return
+                    val values = if (command.parameters.isEmpty()) {
+                        emptyMap()
+                    } else {
+                        val dialog = CustomParametersDialog(project, command)
+                        if (!dialog.showAndGet()) return
+                        dialog.values()
+                    }
                     AdbTargetResolver.resolve(project, command.needsPackage) { devices, packageName ->
                         AdbTasks.run(project, command.name, devices, packageName) { ctx ->
-                            val output = AdbShell.run(ctx.device, command.resolve(packageName), timeoutSeconds = 60)
+                            val output = AdbShell.run(ctx.device, command.resolve(packageName, values), timeoutSeconds = 60)
                             "${command.name}: ${output.ifEmpty { BidaideBundle.message("adb.custom.done") }.take(MAX_OUTPUT)}"
                         }
                     }
