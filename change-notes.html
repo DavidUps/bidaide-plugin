@@ -1,3 +1,11 @@
+<h3>0.7 — Parameters in custom commands</h3>
+
+<p><b>Android CLI</b></p>
+<ul>
+  <li>Custom commands in Settings can have parameters: any <code>{name}</code> besides <code>{package}</code> opens a dialog with a field for it each time you run the command, e.g. <code>am start -n com.app/.Main --es nif "{nif}"</code>. Quote it in the command, since the value goes in as typed.</li>
+  <li>The last values are offered again. Parameters named pass, pwd, pin, token or secret use a hidden field and are never remembered.</li>
+</ul>
+
 <h3>0.6 — Android Device Hub, and ADB is now Android CLI</h3>
 
 <p><b>Android Device Hub</b></p>
